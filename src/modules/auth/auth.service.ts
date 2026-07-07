@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { eq, and } from 'drizzle-orm';
 import { DbService } from '../../database/db.service';
+import { QueueService } from '../../jobs/queue.service';
 import { users, refreshTokens } from '../../database/schema';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -20,6 +21,7 @@ export class AuthService {
     private db: DbService,
     private jwt: JwtService,
     private config: ConfigService,
+    private queue: QueueService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -36,6 +38,15 @@ export class AuthService {
       .insert(users)
       .values({ email: dto.email, passwordHash, name: dto.name })
       .returning();
+
+    // Enqueue rather than send synchronously — registration responds
+    // immediately to the user, and the (simulated) email send happens
+    // in the background, with automatic retries if it fails.
+    await this.queue.welcomeEmailQueue.add('send-welcome-email', {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+    });
 
     return this.issueTokens(user.id, user.email, user.role);
   }
