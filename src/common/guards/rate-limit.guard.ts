@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Ratelimit } from '@upstash/ratelimit';
+import { LogsService } from '../../logs/logs.service';
 import { RedisService } from '../../redis/redis.service';
 import { RATE_LIMIT_KEY, RateLimitOptions } from '../decorators/rate-limit.decorator';
 
@@ -27,7 +28,11 @@ export class RateLimitGuard implements CanActivate {
   // requests rather than reconstructed every time.
   private limiters = new Map<string, Ratelimit>();
 
-  constructor(private redis: RedisService, private reflector: Reflector) {}
+  constructor(
+    private redis: RedisService, 
+    private reflector: Reflector,
+    private logs: LogsService,
+  ) {}
 
   private getLimiter(options: RateLimitOptions): Ratelimit {
     const key = `${options.limit}:${options.window}`;
@@ -70,12 +75,17 @@ export class RateLimitGuard implements CanActivate {
     response.setHeader('X-RateLimit-Remaining', remaining);
     response.setHeader('X-RateLimit-Reset', reset);
 
-    if (!success) {
-      throw new HttpException(
-        { message: 'Too many requests. Please slow down.' },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
+  if (!success) {
+    await this.logs.record(
+    'rate_limit.exceeded',
+    `Rate limit exceeded for ${identifier} on ${request.method} ${request.url}`,
+    { metadata: { identifier, limit: options.limit, window: options.window } },
+    );
+  throw new HttpException(
+    { message: 'Too many requests. Please slow down.' },
+    HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
 
     return true;
   }

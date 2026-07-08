@@ -1,20 +1,26 @@
-import { pgTable, uuid, varchar, timestamp, boolean } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import {
+  pgTable,
+  uuid,
+  varchar,
+  text,
+  jsonb,
+  timestamp,
+  boolean,
+  index,
+} from 'drizzle-orm/pg-core';
+import { relations, sql } from 'drizzle-orm';
 
-// Users table — the foundation everything else (auth, ownership, RBAC) builds on.
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
   name: varchar('name', { length: 255 }),
-  role: varchar('role', { length: 50 }).notNull().default('member'), // 'owner' | 'admin' | 'member'
+  role: varchar('role', { length: 50 }).notNull().default('member'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  deletedAt: timestamp('deleted_at'), // soft delete instead of destructive DELETE
+  deletedAt: timestamp('deleted_at'),
 });
 
-// Refresh tokens are stored (hashed) so we can revoke them individually —
-// this is what makes "logout everywhere" and rotation-on-reuse possible.
 export const refreshTokens = pgTable('refresh_tokens', {
   id: uuid('id').defaultRandom().primaryKey(),
   userId: uuid('user_id')
@@ -26,10 +32,29 @@ export const refreshTokens = pgTable('refresh_tokens', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
-// Relations let Drizzle's query API (db.query.users.findFirst, etc.) do
-// type-safe joins without hand-written SQL.
+export const events = pgTable(
+  'events',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    type: varchar('type', { length: 100 }).notNull(),
+    message: text('message').notNull(),
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    searchIdx: index('events_message_search_idx').using(
+      'gin',
+      sql`to_tsvector('english', ${table.message})`,
+    ),
+    createdAtIdx: index('events_created_at_idx').on(table.createdAt),
+    typeIdx: index('events_type_idx').on(table.type),
+  }),
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   refreshTokens: many(refreshTokens),
+  events: many(events),
 }));
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
@@ -39,6 +64,14 @@ export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
   }),
 }));
 
+export const eventsRelations = relations(events, ({ one }) => ({
+  user: one(users, {
+    fields: [events.userId],
+    references: [users.id],
+  }),
+}));
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type RefreshToken = typeof refreshTokens.$inferSelect;
+export type Event = typeof events.$inferSelect;

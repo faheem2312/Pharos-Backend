@@ -8,6 +8,13 @@
       "when": 1783159349436,
       "tag": "0000_tan_ravenous",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783495680521,
+      "tag": "0001_open_swordsman",
+      "breakpoints": true
     }
   ]
 }

@@ -12,6 +12,7 @@ import { QueueService } from '../../jobs/queue.service';
 import { users, refreshTokens } from '../../database/schema';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { LogsService } from '../../logs/logs.service';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -22,6 +23,7 @@ export class AuthService {
     private jwt: JwtService,
     private config: ConfigService,
     private queue: QueueService,
+    private logs: LogsService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -39,6 +41,9 @@ export class AuthService {
       .values({ email: dto.email, passwordHash, name: dto.name })
       .returning();
 
+    await this.logs.record('user.registered', `${user.email} created an account`, {
+      userId: user.id,
+    });
     // Enqueue rather than send synchronously — registration responds
     // immediately to the user, and the (simulated) email send happens
     // in the background, with automatic retries if it fails.
@@ -51,19 +56,22 @@ export class AuthService {
     return this.issueTokens(user.id, user.email, user.role);
   }
 
-  async login(dto: LoginDto) {
-    const user = await this.db.db.query.users.findFirst({
-      where: eq(users.email, dto.email),
-    });
+async login(dto: LoginDto) {
+  const user = await this.db.db.query.users.findFirst({
+    where: eq(users.email, dto.email),
+  });
 
-    // Deliberately vague error — never reveal whether the email or the
-    // password was wrong, that's a user-enumeration vulnerability.
-    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
-      throw new UnauthorizedException('Invalid email or password');
-    }
-
-    return this.issueTokens(user.id, user.email, user.role);
+  if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+    await this.logs.record('user.login_failed', `Failed login attempt for ${dto.email}`);
+    throw new UnauthorizedException('Invalid email or password');
   }
+
+  await this.logs.record('user.login_success', `${user.email} logged in`, {
+    userId: user.id,
+  });
+
+  return this.issueTokens(user.id, user.email, user.role);
+}
 
   // Refresh-token rotation: every time a refresh token is used, it's revoked
   // and replaced with a brand new one. If a revoked token is ever presented
