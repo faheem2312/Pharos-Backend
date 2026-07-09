@@ -9,10 +9,10 @@ import * as bcrypt from 'bcrypt';
 import { eq, and } from 'drizzle-orm';
 import { DbService } from '../../database/db.service';
 import { QueueService } from '../../jobs/queue.service';
+import { LogsService } from '../../logs/logs.service';
 import { users, refreshTokens } from '../../database/schema';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { LogsService } from '../../logs/logs.service';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -44,6 +44,7 @@ export class AuthService {
     await this.logs.record('user.registered', `${user.email} created an account`, {
       userId: user.id,
     });
+
     // Enqueue rather than send synchronously — registration responds
     // immediately to the user, and the (simulated) email send happens
     // in the background, with automatic retries if it fails.
@@ -56,27 +57,33 @@ export class AuthService {
     return this.issueTokens(user.id, user.email, user.role);
   }
 
-async login(dto: LoginDto) {
-  const user = await this.db.db.query.users.findFirst({
-    where: eq(users.email, dto.email),
-  });
+  async login(dto: LoginDto) {
+    const user = await this.db.db.query.users.findFirst({
+      where: eq(users.email, dto.email),
+    });
 
-  if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
-    await this.logs.record('user.login_failed', `Failed login attempt for ${dto.email}`);
-    throw new UnauthorizedException('Invalid email or password');
+    // Deliberately vague error — never reveal whether the email or the
+    // password was wrong, that's a user-enumeration vulnerability.
+    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+      await this.logs.record('user.login_failed', `Failed login attempt for ${dto.email}`);
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    await this.logs.record('user.login_success', `${user.email} logged in`, {
+      userId: user.id,
+    });
+
+    return this.issueTokens(user.id, user.email, user.role);
   }
-
-  await this.logs.record('user.login_success', `${user.email} logged in`, {
-    userId: user.id,
-  });
-
-  return this.issueTokens(user.id, user.email, user.role);
-}
 
   // Refresh-token rotation: every time a refresh token is used, it's revoked
   // and replaced with a brand new one. If a revoked token is ever presented
   // again, that's a strong signal it was stolen — treat it as a breach.
   async refresh(rawRefreshToken: string) {
+    if (!rawRefreshToken) {
+      throw new UnauthorizedException('No refresh token provided');
+    }
+
     const tokenHash = this.hashToken(rawRefreshToken);
 
     const stored = await this.db.db.query.refreshTokens.findFirst({
@@ -106,6 +113,7 @@ async login(dto: LoginDto) {
   }
 
   async logout(rawRefreshToken: string) {
+    if (!rawRefreshToken) return;
     const tokenHash = this.hashToken(rawRefreshToken);
     await this.db.db
       .update(refreshTokens)
@@ -141,6 +149,9 @@ async login(dto: LoginDto) {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
 
+    // Return the raw tokens so the controller can decide how to deliver
+    // them (as httpOnly cookies) — the service layer stays HTTP-agnostic
+    // and doesn't know or care about cookies, headers, etc.
     return {
       accessToken,
       refreshToken,

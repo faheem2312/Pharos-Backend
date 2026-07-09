@@ -6,6 +6,7 @@ import {
   jsonb,
   timestamp,
   boolean,
+  integer,
   index,
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
@@ -52,6 +53,22 @@ export const events = pgTable(
   }),
 );
 
+// Metadata for files uploaded to R2. The actual bytes never touch this
+// database or the API server — only the key/URL pointing at R2 is stored
+// here, recorded once the backend issues a presigned upload URL.
+export const files = pgTable('files', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  key: varchar('key', { length: 500 }).notNull().unique(),
+  filename: varchar('filename', { length: 255 }).notNull(),
+  contentType: varchar('content_type', { length: 100 }).notNull(),
+  sizeBytes: integer('size_bytes'),
+  publicUrl: text('public_url').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 export const usersRelations = relations(users, ({ many }) => ({
   refreshTokens: many(refreshTokens),
   events: many(events),
@@ -71,7 +88,15 @@ export const eventsRelations = relations(events, ({ one }) => ({
   }),
 }));
 
+export const filesRelations = relations(files, ({ one }) => ({
+  user: one(users, {
+    fields: [files.userId],
+    references: [users.id],
+  }),
+}));
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type RefreshToken = typeof refreshTokens.$inferSelect;
 export type Event = typeof events.$inferSelect;
+export type FileRecord = typeof files.$inferSelect;

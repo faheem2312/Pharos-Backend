@@ -7,6 +7,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { LogsModule } from './logs/logs.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { FilesModule } from './files/files.module';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
 
 @Module({
@@ -18,6 +19,7 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
     DatabaseModule,
     AuthModule,
     UsersModule,
+    FilesModule,
   ],
   providers: [
     {
