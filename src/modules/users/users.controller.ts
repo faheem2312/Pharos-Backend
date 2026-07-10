@@ -7,6 +7,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { DbService } from '../../database/db.service';
 import { RedisService } from '../../redis/redis.service';
 import { users } from '../../database/schema';
+import { ApiKeyGuard } from '../../api-keys/guards/api-key.guard';
 
 const ME_CACHE_TTL_SECONDS = 60;
 
@@ -39,6 +40,14 @@ export class UsersController {
 
     return record;
   }
+
+  // Demonstrates the second auth path: call this with a header like
+// `x-api-key: phr_live_...` instead of a browser session/cookie.
+@Get('me/api')
+@UseGuards(ApiKeyGuard)
+meViaApiKey(@CurrentUser() user: { userId: string }) {
+  return this.me(user);
+}
 
   // Example of stacking RBAC on top of authentication: only owners/admins
   // can hit this route, even though everyone above passed JwtAuthGuard.

@@ -69,6 +69,19 @@ export const files = pgTable('files', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+export const apiKeys = pgTable('api_keys', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 100 }).notNull(),
+  keyPrefix: varchar('key_prefix', { length: 20 }).notNull(),
+  keyHash: varchar('key_hash', { length: 255 }).notNull(),
+  lastUsedAt: timestamp('last_used_at'),
+  revoked: boolean('revoked').notNull().default(false),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 export const usersRelations = relations(users, ({ many }) => ({
   refreshTokens: many(refreshTokens),
   events: many(events),
@@ -95,8 +108,16 @@ export const filesRelations = relations(files, ({ one }) => ({
   }),
 }));
 
+export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
+  user: one(users, {
+    fields: [apiKeys.userId],
+    references: [users.id],
+  }),
+}));
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type RefreshToken = typeof refreshTokens.$inferSelect;
 export type Event = typeof events.$inferSelect;
 export type FileRecord = typeof files.$inferSelect;
+export type ApiKey = typeof apiKeys.$inferSelect;

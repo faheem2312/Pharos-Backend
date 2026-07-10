@@ -10,6 +10,7 @@ import { UsersModule } from './modules/users/users.module';
 import { HealthController } from './health.controller';
 import { FilesModule } from './files/files.module';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
+import { ApiKeysModule } from './api-keys/api-keys.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
     LogsModule,
     DatabaseModule,
     AuthModule,
+    ApiKeysModule,
     UsersModule,
     FilesModule,
   ],
