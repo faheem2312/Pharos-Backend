@@ -7,6 +7,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { LogsModule } from './logs/logs.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { HealthController } from './health.controller';
 import { FilesModule } from './files/files.module';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
 
@@ -20,6 +21,7 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
     AuthModule,
     UsersModule,
     FilesModule,
+    HealthController,
   ],
   providers: [
     {
