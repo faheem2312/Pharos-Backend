@@ -21,8 +21,8 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
     AuthModule,
     UsersModule,
     FilesModule,
-    HealthController,
   ],
+  controllers: [HealthController],
   providers: [
     {
       provide: APP_GUARD,
