@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { DbService } from '../database/db.service';
 import { events } from '../database/schema';
@@ -12,7 +13,7 @@ interface SearchParams {
 
 @Injectable()
 export class LogsService {
-  constructor(private db: DbService) {}
+  constructor(private db: DbService, private eventEmitter: EventEmitter2) {}
 
   // Fire-and-forget style: callers await this for correctness (so a failed
   // write doesn't silently vanish), but it's never on the critical path of
@@ -22,11 +23,26 @@ export class LogsService {
     message: string,
     options?: { userId?: string; metadata?: Record<string, unknown> },
   ) {
-    await this.db.db.insert(events).values({
-      type,
-      message,
-      userId: options?.userId,
-      metadata: options?.metadata,
+    const [event] = await this.db.db
+      .insert(events)
+      .values({
+        type,
+        message,
+        userId: options?.userId,
+        metadata: options?.metadata,
+      })
+      .returning();
+
+    // Decoupled on purpose: LogsService doesn't know or care whether
+    // anything is listening for this. RealtimeGateway happens to be, but
+    // LogsService would work identically if it weren't — this is a
+    // publish/subscribe pattern, not a direct dependency.
+    this.eventEmitter.emit('log.created', {
+      id: event.id,
+      userId: event.userId,
+      type: event.type,
+      message: event.message,
+      createdAt: event.createdAt,
     });
   }
 
