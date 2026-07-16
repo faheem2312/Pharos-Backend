@@ -73,6 +73,19 @@ describe('AuthController (e2e)', () => {
   };
 
   beforeAll(async () => {
+    // Set fallback dummy env vars for CI environments where .env doesn't exist
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://localhost:5432/test';
+    process.env.JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'test-secret';
+    process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test-secret';
+    process.env.UPSTASH_REDIS_URL = process.env.UPSTASH_REDIS_URL || 'redis://localhost:6379';
+    process.env.UPSTASH_REDIS_REST_URL = process.env.UPSTASH_REDIS_REST_URL || 'http://localhost:6379';
+    process.env.UPSTASH_REDIS_REST_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || 'test-token';
+    process.env.R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || 'test-account-id';
+    process.env.R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || 'test-access-key-id';
+    process.env.R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || 'test-secret-access-key';
+    process.env.R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || 'test-bucket';
+    process.env.R2_PUBLIC_URL = process.env.R2_PUBLIC_URL || 'http://localhost:9000';
+
     // Override the stateful external database and redis dependencies
     // with our test doubles.
     const moduleFixture: TestingModule = await Test.createTestingModule({
