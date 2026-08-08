@@ -9,7 +9,7 @@ import { TicketService } from './ticket.service';
 export class RealtimeController {
   constructor(private tickets: TicketService) {}
 
-  @RateLimit({ limit: 20, window: '60 s' })
+  @RateLimit({ limit: 100, window: '60 s' })
   @Get('ticket')
   async getTicket(@CurrentUser() user: { userId: string }) {
     const ticket = await this.tickets.issueTicket(user.userId);
