@@ -41,18 +41,26 @@ export class AuthService {
       .values({ email: dto.email, passwordHash, name: dto.name })
       .returning();
 
-    await this.logs.record('user.registered', `${user.email} created an account`, {
-      userId: user.id,
-    });
+    try {
+      await this.logs.record('user.registered', `${user.email} created an account`, {
+        userId: user.id,
+      });
+    } catch (e) {
+      console.error('Failed to record registration log:', e);
+    }
 
     // Enqueue rather than send synchronously — registration responds
     // immediately to the user, and the (simulated) email send happens
     // in the background, with automatic retries if it fails.
-    await this.queue.welcomeEmailQueue.add('send-welcome-email', {
-      userId: user.id,
-      email: user.email,
-      name: user.name,
-    });
+    try {
+      await this.queue.welcomeEmailQueue.add('send-welcome-email', {
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+      });
+    } catch (e) {
+      console.error('Failed to queue welcome email:', e);
+    }
 
     return this.issueTokens(user.id, user.email, user.role);
   }
@@ -65,13 +73,21 @@ export class AuthService {
     // Deliberately vague error — never reveal whether the email or the
     // password was wrong, that's a user-enumeration vulnerability.
     if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
-      await this.logs.record('user.login_failed', `Failed login attempt for ${dto.email}`);
+      try {
+        await this.logs.record('user.login_failed', `Failed login attempt for ${dto.email}`);
+      } catch (e) {
+        console.error('Failed to record login_failed log:', e);
+      }
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    await this.logs.record('user.login_success', `${user.email} logged in`, {
-      userId: user.id,
-    });
+    try {
+      await this.logs.record('user.login_success', `${user.email} logged in`, {
+        userId: user.id,
+      });
+    } catch (e) {
+      console.error('Failed to record login_success log:', e);
+    }
 
     return this.issueTokens(user.id, user.email, user.role);
   }
