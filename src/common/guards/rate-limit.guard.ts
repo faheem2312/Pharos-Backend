@@ -51,13 +51,18 @@ export class RateLimitGuard implements CanActivate {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+
+    // Always bypass rate-limiting for health checks so Render/monitoring never 500s
+    if (request.url === '/health' || request.path === '/health' || request.url === '/health/') {
+      return true;
+    }
+
     const options =
       this.reflector.getAllAndOverride<RateLimitOptions>(RATE_LIMIT_KEY, [
         context.getHandler(),
         context.getClass(),
       ]) ?? DEFAULT_LIMIT;
-
-    const request = context.switchToHttp().getRequest();
 
     // Prefer a logged-in user's id (fairer + harder to evade than IP alone);
     // fall back to IP for unauthenticated routes like /auth/login.
@@ -67,25 +72,32 @@ export class RateLimitGuard implements CanActivate {
       request.ip ??
       'anonymous';
 
-    const limiter = this.getLimiter(options);
-    const { success, limit, remaining, reset } = await limiter.limit(identifier);
+    try {
+      const limiter = this.getLimiter(options);
+      const { success, limit, remaining, reset } = await limiter.limit(identifier);
 
-    const response = context.switchToHttp().getResponse();
-    response.setHeader('X-RateLimit-Limit', limit);
-    response.setHeader('X-RateLimit-Remaining', remaining);
-    response.setHeader('X-RateLimit-Reset', reset);
+      const response = context.switchToHttp().getResponse();
+      response.setHeader('X-RateLimit-Limit', limit);
+      response.setHeader('X-RateLimit-Remaining', remaining);
+      response.setHeader('X-RateLimit-Reset', reset);
 
-  if (!success) {
-    await this.logs.record(
-    'rate_limit.exceeded',
-    `Rate limit exceeded for ${identifier} on ${request.method} ${request.url}`,
-    { metadata: { identifier, limit: options.limit, window: options.window } },
-    );
-  throw new HttpException(
-    { message: 'Too many requests. Please slow down.' },
-    HttpStatus.TOO_MANY_REQUESTS,
-    );
-  }
+      if (!success) {
+        await this.logs.record(
+          'rate_limit.exceeded',
+          `Rate limit exceeded for ${identifier} on ${request.method} ${request.url}`,
+          { metadata: { identifier, limit: options.limit, window: options.window } },
+        );
+        throw new HttpException(
+          { message: 'Too many requests. Please slow down.' },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      // Fail-open if Redis/Upstash is unreachable so requests don't 500
+      console.error('⚠️ RateLimitGuard Redis error (failing open):', err);
+      return true;
+    }
 
     return true;
   }
